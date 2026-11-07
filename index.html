@@ -148,7 +148,7 @@ const shrink=(f,max,qq)=>new Promise(r=>{const fr=new FileReader();fr.onload=()=
 async function sendMsg(o,last){const id=cid(peer.id);
   if(U(peer.id)?.blocked?.includes(user.uid))return alert('Пользователь вас заблокировал');
   if(me.blocked?.includes(peer.id))return alert('Вы заблокировали этого пользователя');
-  try{await setDoc(doc(db,'chats',id),{participants:[user.uid,peer.id],lastMessage:last,updatedAt:serverTimestamp()},{merge:true});
+  try{if(chats.some(c=>c.id===id))await updateDoc(doc(db,'chats',id),{lastMessage:last,updatedAt:serverTimestamp()});else await setDoc(doc(db,'chats',id),{participants:[user.uid,peer.id].sort(),lastMessage:last,updatedAt:serverTimestamp()});
     await addDoc(collection(db,'chats',id,'messages'),{text:'',...o,from:user.uid,read:false,createdAt:serverTimestamp()})}catch(x){alert('Ошибка: '+x.message)}}
 async function tgt(){return U(subId)}
 
