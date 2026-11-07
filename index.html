@@ -80,8 +80,8 @@ const GEM='<svg width="16" height="16" viewBox="0 0 100 100" style="vertical-ali
 const SEND='<svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M2 12 22 3l-4 18-6-5-3 4v-6l9-8-11 7Z"/></svg>';
 const ENV='<svg width="130" height="130" viewBox="0 0 100 100"><rect x="8" y="22" width="84" height="58" rx="8" fill="#fff"/><path d="m10 26 40 30 40-30" fill="none" stroke="#3B82F6" stroke-width="5"/><circle cx="50" cy="56" r="9" fill="#FF3B30"/></svg>';
 
-let user,me=null,cfg={},tab='chats',sub=null,subId=null,kind='email',mode='login',users=[],chats=[],peer=null,msgs=[],unsubs=[],unM=null,bd=0,bdDone=false,lt=0,anim=true,q='',lastTy=0;
-const U=id=>users.find(u=>u.id===id),owner=()=>me?.email===OWNER,cid=id=>[user.uid,id].sort().join('_');
+let busy=false,lastP=0,user,me=null,cfg={},tab='chats',sub=null,subId=null,kind='email',mode='login',users=[],chats=[],peer=null,msgs=[],unsubs=[],unM=null,bd=0,bdDone=false,lt=0,anim=true,q='',lastTy=0;
+const U=id=>users.find(u=>u.id===id),owner=()=>me?.email===OWNER,isAd=()=>!!(me?.isAdmin||me?.email===OWNER),cid=id=>[user.uid,id].sort().join('_');
 const on_=u=>u&&u.priv?.ls!==false&&Date.now()-tm(u.lastSeen)<70000;
 const seen=u=>!u||u.priv?.ls===false||!tm(u.lastSeen)?'был(а) недавно':'был(а) '+new Date(tm(u.lastSeen)).toLocaleString([],{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
 const av=(u,s=46)=>`<div class="av" style="width:${s}px;height:${s}px;font-size:${s/2.4}px">${u?.avatar?`<img src="${u.avatar}">`:esc((u?.nickname||'?')[0].toUpperCase())}${on_(u)?'<span class="dot"></span>':''}</div>`;
@@ -95,8 +95,8 @@ function render(){
   const A=$('#app'),cl=anim?'an':'';anim=false;
   if(user===undefined||(user&&!me)){A.innerHTML='<div class="ctr">Загрузка…</div>';return}
   if(!user){A.innerHTML=authV();return}
-  if(me.frozen){A.innerHTML=note('Аккаунт заморожен','Обратись к администрации');return}
-  if(cfg.closed&&!me.isAdmin){A.innerHTML=note('Приложение закрыто','Зайди позже');return}
+  if(me.frozen&&!owner()){A.innerHTML=note('Аккаунт заморожен','Обратись к администрации');return}
+  if(cfg.closed&&!isAd()){A.innerHTML=note('Приложение закрыто','Зайди позже');return}
   if(peer){A.innerHTML=chatV();updMsgs();return}
   const V={me:meV,user:userV,priv:privV,prem:premV,gifts:giftsV,theme:themeV,admin:adminV,au:auV}[sub];
   const h=V?V():tab==='contacts'?contactsV():tab==='chats'?chatsV():setV();
@@ -107,7 +107,7 @@ const note=(t,s)=>`<div class="ctr"><h2>${t}</h2><p>${s}</p><button class="lnk" 
 const authV=()=>`<div class="ctr" style="justify-content:center"><h1>Nexogram</h1><div style="width:100%;max-width:340px"><div class="seg"><button data-a="kind" data-k="email" class="${kind==='email'?'on':''}">Email</button><button data-a="kind" data-k="phone" class="${kind==='phone'?'on':''}">Телефон</button></div>${mode==='register'?'<input id="nn" placeholder="Имя"><input id="un" placeholder="Юзернейм (a-z, 0-9, _)" autocapitalize="none">':''}${kind==='email'?'<input id="em" type="email" placeholder="Email" autocapitalize="none">':'<input id="em" type="tel" placeholder="+7 900 000 00 00">'}<input id="pw" type="password" placeholder="Пароль"><button class="btn" data-a="auth">${mode==='login'?'Войти':'Создать аккаунт'}</button><button class="lnk" data-a="mode">${mode==='login'?'Нет аккаунта? Регистрация':'Уже есть аккаунт? Войти'}</button>${mode==='login'&&kind==='email'?'<button class="lnk" data-a="reset">Забыл пароль</button>':''}</div></div>`;
 const contactsV=()=>{const s=q.toLowerCase();return`<h1>Контакты</h1><input id="q" placeholder="Поиск по имени или @юзернейму" value="${esc(q)}">${users.filter(u=>u.id!==user.uid&&(!s||(u.nickname+' @'+u.username).toLowerCase().includes(s.replace(/^@/,'@')))).map(u=>`<div class="row" data-a="open" data-id="${u.id}">${av(u)}<div class="t">${nm(u)}<small>@${esc(u.username||'')} · ${on_(u)?'в сети':seen(u)}</small></div></div>`).join('')||'<p style="text-align:center;color:var(--mu)">Никого не найдено</p>'}`};
 const chatsV=()=>`<h1>Чаты</h1>${chats.filter(c=>!me.blocked?.includes(c.participants.find(p=>p!==user.uid))).map(c=>{const id=c.participants.find(p=>p!==user.uid),u=U(id);return`<div class="row" data-a="open" data-id="${id}">${av(u)}<div class="t">${nm(u)}<small>${c.typing?.[id]>Date.now()-4000?'печатает…':esc(c.lastMessage)}</small></div></div>`}).join('')||'<p style="text-align:center;color:var(--mu)">Нет чатов.<br>Найди человека во вкладке «Контакты»</p>'}`;
-const setV=()=>`<h1>Настройки</h1><div class="row" data-a="sub" data-s="me">${av(me,56)}<div class="t">${nm(me)}<small>@${esc(me.username||'')} · ${esc(me.phone||me.email)}</small></div></div><br>${[['me','user','Мой профиль'],['priv','lock','Конфиденциальность'],['prem','star','Nexo Premium'],['gifts','gift','Мои подарки'],['theme','smile','Оформление']].map(([s,i,l])=>`<div class="row" data-a="sub" data-s="${s}">${I(i,26)}<div class="t">${l}</div>›</div>`).join('')}${me.isAdmin?'<button class="btn red" style="margin-top:14px" data-a="sub" data-s="admin">Панель разработчика</button>':''}<button class="btn gr" style="margin-top:10px;color:#FF3B30" data-a="logout">Выйти</button>`;
+const setV=()=>`<h1>Настройки</h1><div class="row" data-a="sub" data-s="me">${av(me,56)}<div class="t">${nm(me)}<small>@${esc(me.username||'')} · ${esc(me.phone||me.email)}</small></div></div><br>${[['me','user','Мой профиль'],['priv','lock','Конфиденциальность'],['prem','star','Nexo Premium'],['gifts','gift','Мои подарки'],['theme','smile','Оформление']].map(([s,i,l])=>`<div class="row" data-a="sub" data-s="${s}">${I(i,26)}<div class="t">${l}</div>›</div>`).join('')}${isAd()?'<button class="btn red" style="margin-top:14px" data-a="sub" data-s="admin">Панель разработчика</button>':''}<button class="btn gr" style="margin-top:10px;color:#FF3B30" data-a="logout">Выйти</button>`;
 const meV=()=>`${back()}<div style="text-align:center" data-a="pickA">${av(me,96)}<div><small>Нажми на фото, чтобы сменить</small></div></div><br><small>Имя</small><input id="nk" value="${esc(me.nickname)}"><small>Юзернейм</small><input id="un" value="${esc(me.username||'')}" autocapitalize="none"><small>О себе</small><input id="bio" value="${esc(me.bio||'')}"><small>День рождения (ДД.ММ)</small><input id="bd" value="${esc(me.birthday||'')}" placeholder="05.03"><button class="btn" data-a="prof">Сохранить</button><small>Последний вход: ${new Date().toLocaleString()}</small>`;
 const userV=()=>{const u=U(subId);if(!u)return back();const bl=me.blocked?.includes(u.id);return`${back()}<div style="text-align:center">${av(u,100)}<div style="margin-top:8px">${nm(u)}<small>@${esc(u.username||'')}</small><br><small>${on_(u)?'в сети':seen(u)}</small></div></div><br>${u.bio?`<div class="card">${esc(u.bio)}</div>`:''}${u.tg?`<button class="btn" data-a="tg" data-u="${esc(u.tg)}">Telegram-канал</button>`:''}<button class="btn" data-a="open" data-id="${u.id}">Написать</button><button class="btn gr" data-a="blk" data-id="${u.id}">${bl?'Разблокировать':'Заблокировать'}</button>${u.gifts?.length?`<h2>Подарки</h2><div class="gr">${u.gifts.map(g=>`<div class="g">${gs(g)}</div>`).join('')}</div>`:''}`};
 const privV=()=>`${back()}<h1>Конфиденциальность</h1>${[['ls','Показывать «в сети» и последний вход'],['ty','Показывать «печатает…»'],['rd','Отправлять отметку «прочитано»']].map(([k,l])=>`<div class="row"><div class="t">${l}</div>${sw(me.priv?.[k]!==false,'pv',k)}</div>`).join('')}<h2 style="margin-top:16px">Чёрный список</h2>${(me.blocked||[]).map(id=>`<div class="row">${av(U(id),36)}<div class="t">${esc(U(id)?.nickname||id)}</div><button class="lnk" data-a="blk" data-id="${id}" style="margin:0">Убрать</button></div>`).join('')||'<small>Пусто</small>'}<br><button class="btn" data-a="pass">Сменить пароль по email</button>`;
@@ -154,7 +154,8 @@ async function tgt(){return U(subId)}
 
 const acts={
   kind(d){kind=d.k;render()},mode(){mode=mode==='login'?'register':'login';render()},
-  async auth(){let e=$('#em').value.trim().toLowerCase();const p=$('#pw').value;
+  async auth(){if(busy)return;busy=true;try{await acts._auth()}finally{busy=false}},
+  async _auth(){let e=$('#em').value.trim().toLowerCase();const p=$('#pw').value;
     if(kind==='phone'){const dg=e.replace(/\D/g,'');if(dg.length<10)return alert('Введи номер телефона');e='p'+dg+'@nexo.phone'}
     try{if(mode==='login')await signInWithEmailAndPassword(auth,e,p);else{const n=$('#nn').value.trim();let un=$('#un').value.trim().toLowerCase();
       if(!n)return alert('Введи имя');if(!/^[a-z0-9_]{4,20}$/.test(un))return alert('Юзернейм: 4–20 символов, a-z, 0-9, _');
@@ -183,7 +184,10 @@ const acts={
   async buy(d){const g=GIFTS.find(x=>x[0]===d.g);if(me.gifts?.includes(g[0]))return alert('Уже есть');if((me.balance||0)<g[5])return alert('Не хватает звёзд');
     if(confirm(`Купить «${g[1]}» за ${g[5]} звёзд?`))await upd(user.uid,{balance:increment(-g[5]),gifts:arrayUnion(g[0])}).catch(x=>alert(x.message))},
   async app(){await setDoc(doc(db,'config','app'),{closed:!cfg.closed},{merge:true}).catch(x=>alert(x.message))},
-  async adm(d){const u=U(subId);if(!u)return;try{
+  async adm(d){const u=U(subId);if(!u)return;
+    if(d.k==='frz'&&(u.id===user.uid||u.email===OWNER||(u.isAdmin&&!owner())))return alert('Этот аккаунт нельзя заморозить');
+    if(d.k==='adm'&&(u.email===OWNER||u.id===user.uid))return alert('Нельзя изменить права этого аккаунта');
+    try{
     if(d.k==='frz')await upd(u.id,{frozen:!u.frozen});
     if(d.k==='prem')await upd(u.id,{premium:!u.premium});
     if(d.k==='adm')await upd(u.id,{isAdmin:!u.isAdmin});
@@ -198,7 +202,8 @@ const acts={
   async bdc(){bdDone=true;render();await upd(user.uid,{gifts:arrayUnion('g17'),birthdayClaimedYear:new Date().getFullYear()}).catch(()=>{})},
   logout(){signOut(auth)}
 };
-document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t)acts[t.dataset.a]?.(t.dataset)});
+document.addEventListener('pointerup',e=>{if(e.target.closest('[data-a="auth"]')){lastP=Date.now();acts.auth()}});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t&&!(t.dataset.a==='auth'&&Date.now()-lastP<800))acts[t.dataset.a]?.(t.dataset)});
 document.addEventListener('input',e=>{const i=e.target;
   if(i.id==='q'){q=i.value;const p=i.selectionStart;render();const n=$('#q');n.focus();n.setSelectionRange(p,p)}
   if(i.id==='mi'&&me.priv?.ty!==false&&Date.now()-lastTy>2500){lastTy=Date.now();updateDoc(doc(db,'chats',cid(peer.id)),{['typing.'+user.uid]:Date.now()}).catch(()=>{})}});
